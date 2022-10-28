@@ -1,5 +1,5 @@
 [package]
-name = "huffpill"
+name = "server"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,5 +9,13 @@ edition = "2021"
 actix = "0.13.0"
 actix-web = "4.2.1"
 actix-web-actors = "4.1.0"
+anyhow = "1.0.66"
+async-trait = "0.1.58"
+awc = "3.0.1"
 ethers = "1.0.0"
 lazy_static = "1.4.0"
+sqlx = { version = "0.6.2", features = ["sqlite", "runtime-tokio-native-tls"] }
+structopt = "0.3.26"
+tokio = { version = "1.21.2", features = ["full"]}
+url = "2.3.1"
+
