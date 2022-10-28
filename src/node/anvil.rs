@@ -12,7 +12,7 @@ impl HuffPillInstance {
     /// Spin up a new HuffPillInstance
     pub fn new(port: u16, allowed_methods: Vec<String>) -> Self {
         Self {
-            anvil: start_anvil(port),
+            anvil: start_anvil(port, 30 * 60),
             allowed_methods,
         }
     }
@@ -27,6 +27,8 @@ impl HuffPillInstance {
     }
 }
 
-pub fn start_anvil(port: u16) -> AnvilInstance {
+/// Spin up a local anvil node to listen to incoming RPC JSON requests
+/// TODO: This instance should be dropped automatically after "timeout" in seconds
+pub fn start_anvil(port: u16, timeout: u32) -> AnvilInstance {
     Anvil::new().port(port).spawn()
 }
