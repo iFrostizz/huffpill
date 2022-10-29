@@ -1,18 +1,62 @@
 // Simple proxy that forwards all the requests to anvil, and filters cheating requests
 
-use std::net::ToSocketAddrs;
+use std::future::{Future, Ready};
 
-use crate::node::anvil::start_anvil;
-use actix_web::{error, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use crate::{
+    backend::convention::{Request, Response},
+    node::anvil::start_anvil,
+};
+// use actix::prelude::Stream;
+use actix_web::{
+    error,
+    http::StatusCode,
+    middleware,
+    web::{self, BytesMut},
+    App, Error, FromRequest, HttpRequest, HttpResponse, HttpServer,
+};
 use awc::Client;
+use serde::Serialize;
 use url::Url;
 
-async fn forward(
+use futures_core::stream::Stream;
+use futures_util::StreamExt;
+
+#[derive(Serialize, Debug)]
+struct Info {
+    name: String,
+}
+
+pub async fn forward(
     req: HttpRequest,
-    payload: web::Payload,
+    mut payload: web::Payload,
     url: web::Data<Url>,
     client: web::Data<Client>,
 ) -> Result<HttpResponse, Error> {
+    let size = payload.size_hint();
+    if size.0 > 1000 {
+        return Ok(HttpResponse::new(StatusCode::PAYLOAD_TOO_LARGE));
+    }
+
+    let mut bytes = web::BytesMut::new();
+
+    while let Some(item) = payload.next().await {
+        bytes.extend_from_slice(&item?);
+    }
+
+    let json_rpc_req: Request = match serde_json::from_slice(bytes.as_ref()) {
+        Ok(ok) => ok,
+        Err(err) => {
+            dbg!(&err);
+            todo!();
+        }
+    };
+
+    dbg!(&json_rpc_req);
+
+    // if json_rpc_req.method.method
+
+    // dbg!(&json_rpc_req);
+
     let mut new_url = url.get_ref().clone();
     new_url.set_path(req.uri().path());
     new_url.set_query(req.uri().query());
@@ -27,17 +71,25 @@ async fn forward(
         None => forwarded_req,
     };*/
 
-    let res = forwarded_req
-        .send_stream(payload)
-        .await
-        .map_err(error::ErrorInternalServerError)?;
+    dbg!(&forwarded_req);
 
-    let mut client_resp = HttpResponse::build(res.status());
+    /*let res = forwarded_req
+    .send_stream(bytes)
+    .await
+    .map_err(error::ErrorInternalServerError)?;*/
+
+    // let mut client_resp = HttpResponse::build(bytes);
     // Remove `Connection` as per
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Connection#Directives
     /*for (header_name, header_value) in res.headers().iter().filter(|(h, _)| *h != "connection") {
         client_resp.insert_header((header_name.clone(), header_value.clone()));
     }*/
+
+    let res = forwarded_req
+        .send_body(bytes)
+        .await
+        .map_err(error::ErrorInternalServerError)?;
+    let mut client_resp = HttpResponse::build(res.status());
 
     Ok(client_resp.streaming(res))
 }

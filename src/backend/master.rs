@@ -2,10 +2,8 @@ use actix::prelude::*;
 use actix::{Actor, StreamHandler};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
-use async_trait::async_trait;
 use std::time::{Duration, Instant};
 
-use crate::node::anvil::start_anvil;
 use crate::node::proxy::init_proxy;
 
 /// How often heartbeat pings are sent
@@ -83,34 +81,32 @@ impl Actor for MyWs {
 // #[async_trait]
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        /*match msg {
-            Ok(ws::Message::Text(text)) => {
-                dbg!(&text);
+        if let Ok(ws::Message::Text(msg)) = msg {
+            let output = match msg.to_string().as_str() {
+                "start" => {
+                    // TODO: get port from API key
+                    let (anvil, listen) = (9000, 9001);
 
-                let output = match text.to_string().as_str() {
-                    "start" => {
-                        init_proxy(9000, 9001);
-                        ""
-                    }
-                    _ => "not recognized",
-                };
+                    // TODO: map errors and send back to websocket
+                    let fut = async move {
+                        init_proxy(anvil, listen)
+                            .await
+                            .expect("child process encountered an error");
+                    };
+                    let fut = actix::fut::wrap_future::<_, Self>(fut);
+                    ctx.spawn(fut);
 
-                // ctx.text(output)
+                    format!("You instance is available at 127.0.0.1:{listen}")
+                }
+                "stop" => {
+                    // TODO: get port from API key and stop anvil and proxy
+                    String::from("stop")
+                }
+                _ => String::from("not recognized"),
+            };
 
-                //
-            }
-            _ => (),
-        }*/
-
-        let fut = async move {
-            let status = init_proxy(9000, 9001)
-                .await
-                .expect("child process encountered an error");
-
-            // println!("child status was: {}", status);
-        };
-        let fut = actix::fut::wrap_future::<_, Self>(fut);
-        ctx.spawn(fut);
+            ctx.text(output)
+        }
         // ctx.add_stream(reader.map(|l| Ok(Line(l.expect("Not a line")))));
     }
 }

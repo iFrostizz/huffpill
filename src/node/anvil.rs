@@ -2,6 +2,13 @@
 // Create an anvil listener that will filter forbidden methods and forward the filtered ones to the actual node
 
 use ethers::utils::{Anvil, AnvilInstance};
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Param {
+    String(String),
+    Boolean(bool),
+}
 
 pub struct HuffPillInstance {
     anvil: AnvilInstance,
