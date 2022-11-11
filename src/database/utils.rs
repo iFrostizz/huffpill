@@ -3,8 +3,8 @@ use structopt::StructOpt;
 #[derive(sqlx::FromRow, Debug)]
 pub struct UserInfo {
     pub name: String,
-    pub port_in: u16,
-    pub port_out: u16,
+    pub port_in: i64,
+    pub port_out: i64,
 }
 
 #[derive(sqlx::FromRow, Debug)]

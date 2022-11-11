@@ -1,6 +1,6 @@
 // Simple proxy that forwards all the requests to anvil, and filters cheating requests
 
-use std::future::{Future, Ready};
+use std::{fs::File, io::prelude::*};
 
 use crate::{
     backend::convention::{Request, Response},
@@ -14,7 +14,7 @@ use actix_web::{
     web::{self, BytesMut},
     App, Error, FromRequest, HttpRequest, HttpResponse, HttpServer,
 };
-use awc::Client;
+use awc::{Client, ClientRequest};
 use serde::Serialize;
 use url::Url;
 
@@ -31,6 +31,7 @@ pub async fn forward(
     mut payload: web::Payload,
     url: web::Data<Url>,
     client: web::Data<Client>,
+    forbidden_methods: web::Data<Vec<String>>,
 ) -> Result<HttpResponse, Error> {
     let size = payload.size_hint();
     if size.0 > 1000 {
@@ -47,46 +48,33 @@ pub async fn forward(
         Ok(ok) => ok,
         Err(err) => {
             dbg!(&err);
-            todo!();
+            return Ok(HttpResponse::new(StatusCode::IM_A_TEAPOT));
         }
     };
 
-    dbg!(&json_rpc_req);
-
-    // if json_rpc_req.method.method
-
-    // dbg!(&json_rpc_req);
+    if forbidden_methods.contains(&json_rpc_req.method) {
+        return Ok(HttpResponse::new(StatusCode::METHOD_NOT_ALLOWED));
+    }
 
     let mut new_url = url.get_ref().clone();
     new_url.set_path(req.uri().path());
     new_url.set_query(req.uri().query());
 
-    // TODO: This forwarded implementation is incomplete as it only handles the unofficial
-    // X-Forwarded-For header but not the official Forwarded one.
     let forwarded_req = client
         .request_from(new_url.as_str(), req.head())
         .no_decompress();
-    /*let forwarded_req = match req.head().peer_addr {
-        Some(addr) => forwarded_req.insert_header(("x-forwarded-for", format!("{}", addr.ip()))),
-        None => forwarded_req,
-    };*/
 
     dbg!(&forwarded_req);
 
-    /*let res = forwarded_req
-    .send_stream(bytes)
-    .await
-    .map_err(error::ErrorInternalServerError)?;*/
+    build_and_stream_res(forwarded_req, bytes).await
+}
 
-    // let mut client_resp = HttpResponse::build(bytes);
-    // Remove `Connection` as per
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Connection#Directives
-    /*for (header_name, header_value) in res.headers().iter().filter(|(h, _)| *h != "connection") {
-        client_resp.insert_header((header_name.clone(), header_value.clone()));
-    }*/
-
-    let res = forwarded_req
-        .send_body(bytes)
+pub async fn build_and_stream_res(
+    req: ClientRequest,
+    body: BytesMut,
+) -> Result<HttpResponse, Error> {
+    let res = req
+        .send_body(body)
         .await
         .map_err(error::ErrorInternalServerError)?;
     let mut client_resp = HttpResponse::build(res.status());
@@ -105,10 +93,19 @@ pub async fn init_proxy(in_port: u16, out_port: u16) -> std::io::Result<()> {
     let forward_url = format!("http://127.0.0.1:{out_port}");
     let forward_url = Url::parse(&forward_url).unwrap();
 
+    let mut file = File::open("reference.txt").unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    let forbidden_methods = content
+        .split('\n')
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>();
+
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(Client::default()))
             .app_data(web::Data::new(anvil_endpoint.clone()))
+            .app_data(web::Data::new(forbidden_methods.clone()))
             .wrap(middleware::Logger::default())
             .default_service(web::to(forward))
     })

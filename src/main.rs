@@ -75,9 +75,9 @@ impl Sqlite {
 
         sqlx::query!(
             r#"
-    CREATE TABLE challenges (
+    CREATE TABLE IF NOT EXISTS challenges (
             name TEXT PRIMARY KEY,
-                difficulty INTEGER,
+            difficulty INTEGER,
             solves INTEGER,
             kind VARCHAR(3) 
             )
@@ -155,6 +155,7 @@ FROM users
         "#
         )
         .fetch_optional(&self.pool)
-        .await?
+        .await
+        .ok()?
     }
 }

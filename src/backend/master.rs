@@ -118,7 +118,7 @@ async fn index(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, E
 }
 
 pub async fn start_server() -> std::io::Result<()> {
-    HttpServer::new(|| App::new().route("/chad/", web::get().to(index)))
+    HttpServer::new(|| App::new().route("/chad", web::get().to(index)))
         .bind(("127.0.0.1", 8080))?
         .run()
         .await?;
